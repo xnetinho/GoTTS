@@ -35,16 +35,16 @@ ARG TARGETARCH
 # Determinar o binário apropriado do Piper com base na arquitetura
 RUN \
     if [ "$TARGETARCH" = "amd64" ]; then \
-        export PIPER_ARCH="x86_64"; \
+        export PIPER_ARCH="amd64"; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
-        export PIPER_ARCH="aarch64"; \
+        export PIPER_ARCH="arm64"; \
     else \
         echo "Arquitetura não suportada: $TARGETARCH"; exit 1; \
     fi && \
-    wget https://github.com/rhasspy/piper/releases/download/v0.0.2/piper_0.0.2_linux_$PIPER_ARCH.tar.gz && \
-    tar xvf piper_0.0.2_linux_$PIPER_ARCH.tar.gz && \
+    wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_$PIPER_ARCH.tar.gz && \    
+    tar xvf piper_$PIPER_ARCH.tar.gz && \
     mv piper /usr/local/bin/ && \
-    rm piper_0.0.2_linux_$PIPER_ARCH.tar.gz
+    rm piper_$PIPER_ARCH.tar.gz
 
 # Expor a porta da aplicação
 EXPOSE 8080
