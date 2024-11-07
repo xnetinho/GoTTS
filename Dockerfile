@@ -43,11 +43,11 @@ RUN \
     fi && \
     wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_$PIPER_ARCH.tar.gz && \
     mkdir -p /tmp/piper_install && \
-    tar xvf piper_$PIPER_ARCH.tar.gz -C /tmp/piper_install && \
-    mv /tmp/piper_install/piper /usr/local/bin/piper && \
+    tar xzf piper_$PIPER_ARCH.tar.gz -C /tmp/piper_install && \
+    mv /tmp/piper_install/piper/piper /usr/local/bin/piper && \
     chmod +x /usr/local/bin/piper && \
-    mv /tmp/piper_install/lib* /usr/local/lib/ && \
-    mv /tmp/piper_install/espeak-ng-data /usr/local/share/ && \
+    mv /tmp/piper_install/piper/lib* /usr/local/lib/ && \
+    mv /tmp/piper_install/piper/espeak-ng-data /usr/local/share/ && \
     rm -rf /tmp/piper_install && \
     rm piper_$PIPER_ARCH.tar.gz
 
