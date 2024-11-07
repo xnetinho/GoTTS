@@ -36,23 +36,23 @@ RUN chmod 755 /app/voices
 RUN \
     if [ "$TARGETARCH" = "amd64" ]; then \
         export PIPER_ARCH="amd64"; \
-        export LD_ARCH="x86_64"; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
-        export PIPER_ARCH="aarch64"; \
-        export LD_ARCH="aarch64"; \
+        export PIPER_ARCH="arm64"; \
     else \
         echo "Arquitetura não suportada: $TARGETARCH"; exit 1; \
     fi && \
     wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_$PIPER_ARCH.tar.gz && \
     mkdir -p /tmp/piper_install && \
     tar xvf piper_$PIPER_ARCH.tar.gz -C /tmp/piper_install && \
-    mv /tmp/piper_install/piper /usr/local/bin/ && \
+    mv /tmp/piper_install/piper /usr/local/bin/piper && \
     chmod +x /usr/local/bin/piper && \
-    mv /tmp/piper_install/lib*.so* /usr/local/lib/ && \
+    mv /tmp/piper_install/lib* /usr/local/lib/ && \
     mv /tmp/piper_install/espeak-ng-data /usr/local/share/ && \
     rm -rf /tmp/piper_install && \
-    rm piper_$PIPER_ARCH.tar.gz && \
-    echo "/usr/local/lib" >> /etc/ld-musl-$LD_ARCH.path || true
+    rm piper_$PIPER_ARCH.tar.gz
+
+# Definir o LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 # Expor a porta da aplicação
 EXPOSE 8080
