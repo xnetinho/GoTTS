@@ -89,14 +89,15 @@ func fetchVoicesManifest() (VoicesManifest, error) {
 }
 
 func downloadVoiceFiles(voice VoiceInfo, voicesDir string) error {
-	for filePath := range voice.Files {
-		if !strings.HasSuffix(filePath, ".onnx") {
-			continue // Baixar apenas arquivos .onnx por enquanto
-		}
+	voiceDir := filepath.Join(voicesDir, voice.Name)
+	if err := os.MkdirAll(voiceDir, 0755); err != nil {
+		return fmt.Errorf("erro ao criar diretório para a voz %s: %v", voice.Name, err)
+	}
 
+	for filePath := range voice.Files {
 		url := baseDownloadURL + filePath
 		filename := filepath.Base(filePath)
-		targetPath := filepath.Join(voicesDir, filename)
+		targetPath := filepath.Join(voiceDir, filename)
 
 		if err := downloadFile(url, targetPath); err != nil {
 			return err

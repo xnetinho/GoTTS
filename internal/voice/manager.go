@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -25,17 +24,16 @@ func NewManager(voicesDir string) (*Manager, error) {
 		voicesDir: voicesDir,
 	}
 
-	// Lista os arquivos .onnx disponíveis
-	files, err := os.ReadDir(voicesDir)
+	entries, err := os.ReadDir(voicesDir)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao ler diretório de vozes: %v", err)
 	}
 
-	for _, file := range files {
-		if !file.IsDir() && strings.HasSuffix(strings.ToLower(file.Name()), ".onnx") {
-			fullPath := filepath.Join(voicesDir, file.Name())
-			voiceName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
-			m.voices[voiceName] = fullPath
+	for _, entry := range entries {
+		if entry.IsDir() {
+			voiceName := entry.Name()
+			voicePath := filepath.Join(voicesDir, voiceName)
+			m.voices[voiceName] = voicePath
 			log.Printf("Voz encontrada: %s", voiceName)
 		}
 	}
@@ -49,7 +47,7 @@ func NewManager(voicesDir string) (*Manager, error) {
 
 func (m *Manager) Synthesize(text, voiceName string) ([]byte, error) {
 	m.mu.RLock()
-	modelPath, exists := m.voices[voiceName]
+	voiceDir, exists := m.voices[voiceName]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -60,7 +58,7 @@ func (m *Manager) Synthesize(text, voiceName string) ([]byte, error) {
 		return nil, fmt.Errorf("texto não pode estar vazio")
 	}
 
-	return Synthesize(modelPath, text)
+	return Synthesize(voiceDir, text)
 }
 
 func (m *Manager) ListVoices() []string {

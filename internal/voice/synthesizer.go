@@ -3,26 +3,22 @@ package voice
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/amitybell/piper"
 	asset "github.com/amitybell/piper-asset"
 )
 
-func Synthesize(modelPath string, text string) ([]byte, error) {
+func Synthesize(voiceDir string, text string) ([]byte, error) {
 	// Garantir que o texto termine com pontuação
 	if len(text) > 0 && !strings.ContainsAny(text[len(text)-1:], ".!?") {
 		text = text + "."
 	}
 
-	// Obter o diretório do modelo
-	modelDir := filepath.Dir(modelPath)
-
-	// Criar um asset.Asset personalizado
+	// Criar um asset.Asset personalizado usando o diretório da voz
 	voiceAsset := asset.Asset{
 		Name: "custom-voice",
-		FS:   os.DirFS(modelDir),
+		FS:   os.DirFS(voiceDir),
 	}
 
 	// Especificar o dataDir (pode ser vazio ou um caminho específico)
