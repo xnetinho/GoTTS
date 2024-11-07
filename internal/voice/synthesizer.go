@@ -3,6 +3,7 @@ package voice
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -27,8 +28,10 @@ func Synthesize(voiceDir string, text string) ([]byte, error) {
 	configPath = modelPath + ".json"
 
 	// Verificar se o arquivo de configuração existe
-	if _, err := exec.LookPath(configPath); err != nil {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("arquivo de configuração não encontrado: %s", configPath)
+	} else if err != nil {
+		return nil, fmt.Errorf("erro ao verificar o arquivo de configuração: %v", err)
 	}
 
 	// Executar o binário do piper
