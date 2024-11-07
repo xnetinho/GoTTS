@@ -1,12 +1,11 @@
 package voice
 
 import (
+	"bytes"
 	"fmt"
-	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
-
-	"github.com/amitybell/piper"
-	asset "github.com/amitybell/piper-asset"
 )
 
 func Synthesize(voiceDir string, text string) ([]byte, error) {
@@ -15,26 +14,41 @@ func Synthesize(voiceDir string, text string) ([]byte, error) {
 		text = text + "."
 	}
 
-	// Criar um asset.Asset personalizado usando o diretório da voz
-	voiceAsset := asset.Asset{
-		Name: "custom-voice",
-		FS:   os.DirFS(voiceDir),
+	// Caminhos para os arquivos do modelo e configuração
+	modelPath := ""
+	configPath := ""
+
+	// Procurar pelos arquivos .onnx e .onnx.json no diretório da voz
+	files, err := filepath.Glob(filepath.Join(voiceDir, "*.onnx"))
+	if err != nil || len(files) == 0 {
+		return nil, fmt.Errorf("nenhum arquivo .onnx encontrado na voz %s", voiceDir)
+	}
+	modelPath = files[0]
+	configPath = modelPath + ".json"
+
+	// Verificar se o arquivo de configuração existe
+	if _, err := exec.LookPath(configPath); err != nil {
+		return nil, fmt.Errorf("arquivo de configuração não encontrado: %s", configPath)
 	}
 
-	// Especificar o dataDir (pode ser vazio ou um caminho específico)
-	dataDir := ""
+	// Executar o binário do piper
+	cmd := exec.Command("piper",
+		"--model", modelPath,
+		"--config", configPath,
+		"--output_file", "-",
+	)
+	cmd.Stdin = strings.NewReader(text)
 
-	// Criar nova instância do TTS com os argumentos corretos
-	tts, err := piper.New(dataDir, voiceAsset)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao criar TTS: %v", err)
+	// Capturar a saída
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	// Executar o comando
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("erro na síntese: %v: %s", err, stderr.String())
 	}
 
-	// Sintetizar o texto
-	audio, err := tts.Synthesize(text)
-	if err != nil {
-		return nil, fmt.Errorf("erro na síntese: %v", err)
-	}
-
-	return audio, nil
+	return out.Bytes(), nil
 }
