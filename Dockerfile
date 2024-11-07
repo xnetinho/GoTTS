@@ -16,7 +16,7 @@ RUN go build -o main ./cmd/api
 # Iniciar uma nova etapa para a imagem final
 FROM debian:bullseye-slim
 
-# **Adicionar a declaração do ARG TARGETARCH aqui**
+# Obter a arquitetura de destino
 ARG TARGETARCH
 
 # Instalar dependências
@@ -50,6 +50,7 @@ RUN \
     chmod +x /usr/local/bin/piper && \
     mv /tmp/piper_install/piper/lib* /usr/local/lib/ && \
     mv /tmp/piper_install/piper/espeak-ng-data /usr/local/share/ && \
+    ldconfig && \
     rm -rf /tmp/piper_install && \
     rm piper_$PIPER_ARCH.tar.gz
 
