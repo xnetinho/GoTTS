@@ -10,6 +10,7 @@ FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/main .
 RUN mkdir -p /app/voices
+RUN chmod 755 /app/voices
 
 EXPOSE 8080
 CMD ["./main"]

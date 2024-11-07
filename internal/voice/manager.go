@@ -7,91 +7,60 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/amitybell/piper"
-	asset "github.com/amitybell/piper-asset"
 )
 
 type Manager struct {
-	voices    map[string]*piper.TTS
+	voices    map[string]string // mapa de nome -> caminho do arquivo
 	voicesDir string
 	mu        sync.RWMutex
 }
 
-func NewManager(dataDir string, voiceFiles []string) (*Manager, error) {
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+func NewManager(voicesDir string) (*Manager, error) {
+	if err := os.MkdirAll(voicesDir, 0755); err != nil {
 		return nil, fmt.Errorf("falha ao criar diretório de vozes: %v", err)
 	}
 
 	m := &Manager{
-		voices:    make(map[string]*piper.TTS),
-		voicesDir: dataDir,
+		voices:    make(map[string]string),
+		voicesDir: voicesDir,
 	}
 
-	for _, voiceFile := range voiceFiles {
-		voiceFile = strings.TrimSpace(voiceFile)
-		if !strings.HasSuffix(strings.ToLower(voiceFile), ".onnx") {
-			log.Printf("Aviso: arquivo ignorado %s - extensão inválida", voiceFile)
-			continue
+	// Lista os arquivos .onnx disponíveis
+	files, err := os.ReadDir(voicesDir)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler diretório de vozes: %v", err)
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(strings.ToLower(file.Name()), ".onnx") {
+			fullPath := filepath.Join(voicesDir, file.Name())
+			voiceName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
+			m.voices[voiceName] = fullPath
+			log.Printf("Voz encontrada: %s", voiceName)
 		}
+	}
 
-		voicePath := filepath.Clean(filepath.Join(dataDir, voiceFile))
-
-		if _, err := os.Stat(voicePath); err != nil {
-			if os.IsNotExist(err) {
-				log.Printf("Aviso: arquivo de voz não encontrado: %s", voicePath)
-				continue
-			}
-			return nil, fmt.Errorf("erro ao verificar arquivo %s: %v", voicePath, err)
-		}
-
-		modelAsset := asset.NewFile(voicePath)
-		tts, err := piper.New(voicePath, modelAsset)
-		if err != nil {
-			return nil, fmt.Errorf("falha ao carregar voz %s: %v", voiceFile, err)
-		}
-
-		voiceName := filepath.Base(voiceFile)
-		m.voices[voiceName] = tts
-		log.Printf("Voz carregada com sucesso: %s", voiceName)
+	if len(m.voices) == 0 {
+		return nil, fmt.Errorf("nenhuma voz foi encontrada")
 	}
 
 	return m, nil
 }
 
-func (m *Manager) Close() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, v := range m.voices {
-		v.Close()
-	}
-}
-
-func (m *Manager) Synthesize(text, voice string) ([]byte, error) {
+func (m *Manager) Synthesize(text, voiceName string) ([]byte, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	modelPath, exists := m.voices[voiceName]
+	m.mu.RUnlock()
 
-	tts, exists := m.voices[voice]
 	if !exists {
-		return nil, fmt.Errorf("voz %s não encontrada", voice)
+		return nil, fmt.Errorf("voz %s não encontrada", voiceName)
 	}
 
 	if text == "" {
 		return nil, fmt.Errorf("texto não pode estar vazio")
 	}
 
-	// Garantir que o texto termine com pontuação
-	if !strings.ContainsAny(text[len(text)-1:], ".!?") {
-		text = text + "."
-	}
-
-	audio, err := tts.Synthesize(text)
-	if err != nil {
-		return nil, fmt.Errorf("erro na síntese: %v", err)
-	}
-
-	return audio, nil
+	return Synthesize(modelPath, text)
 }
 
 func (m *Manager) ListVoices() []string {
@@ -105,6 +74,21 @@ func (m *Manager) ListVoices() []string {
 	return voices
 }
 
+func (m *Manager) GetVoicePath(voice string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	path, exists := m.voices[voice]
+	if !exists {
+		return "", fmt.Errorf("voz %s não encontrada", voice)
+	}
+	return path, nil
+}
+
 func (m *Manager) GetVoicesDir() string {
 	return m.voicesDir
+}
+
+func (m *Manager) Close() {
+	// Método mantido vazio para compatibilidade com a interface existente
 }

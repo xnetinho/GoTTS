@@ -7,16 +7,27 @@ import (
 	"tts-api/internal/handlers"
 	"tts-api/internal/middleware"
 	"tts-api/internal/voice"
+	"tts-api/internal/voice/downloader"
 )
 
 func main() {
 	cfg := config.Load()
 
-	voiceManager, err := voice.NewManager(cfg.VoicesDir, cfg.VoiceFiles)
+	// Download das vozes solicitadas
+	if err := downloader.DownloadVoices(cfg.VoicesDir, cfg.Voices); err != nil {
+		log.Printf("Aviso: erro no download das vozes: %v", err)
+	}
+
+	// Inicializa o gerenciador com as vozes disponíveis
+	voiceManager, err := voice.NewManager(cfg.VoicesDir)
 	if err != nil {
 		log.Fatalf("Falha ao inicializar gerenciador de vozes: %v", err)
 	}
-	defer voiceManager.Close() // Importante: adicionar esta linha
+	// Close não é mais necessário
+
+	// Lista as vozes disponíveis
+	voices := voiceManager.ListVoices()
+	log.Printf("Vozes disponíveis: %v", voices)
 
 	ttsHandler := handlers.NewTTSHandler(voiceManager)
 

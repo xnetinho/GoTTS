@@ -6,18 +6,18 @@ import (
 )
 
 type Config struct {
-	Port       string
-	AuthToken  string
-	VoiceFiles []string
-	VoicesDir  string
+	Port      string
+	AuthToken string
+	Voices    []string // renomeado para manter consistência
+	VoicesDir string
 }
 
 func Load() *Config {
 	return &Config{
-		Port:       getEnvOrDefault("PORT", "8080"),
-		AuthToken:  getEnvOrDefault("AUTH_TOKEN", "default-token"),
-		VoiceFiles: strings.Split(getEnvOrDefault("VOICE_FILES", "en_US-jenny-medium.onnx"), ","),
-		VoicesDir:  getEnvOrDefault("VOICES_DIR", "./voices"),
+		Port:      getEnvOrDefault("PORT", "8080"),
+		AuthToken: getEnvOrDefault("AUTH_TOKEN", "default-token"),
+		Voices:    strings.Split(getEnvOrDefault("VOICE_FILES", ""), ","), // corrigido nome da variável
+		VoicesDir: getEnvOrDefault("VOICES_DIR", "./voices"),
 	}
 }
 

@@ -8,7 +8,7 @@ services:
     environment:
       - PORT=${PORT:-8080}
       - AUTH_TOKEN=${AUTH_TOKEN}
-      - VOICE_FILES=${VOICE_FILES}
+      - VOICE_FILES=${VOICE_FILES} # mantido VOICE_FILES para compatibilidade
       - VOICES_DIR=/app/voices
     volumes:
       - ./voices:/app/voices

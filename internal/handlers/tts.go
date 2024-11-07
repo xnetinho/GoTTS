@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"tts-api/internal/voice"
 )
 
@@ -39,12 +40,18 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Voice == "" {
-		http.Error(w, "Voz não especificada", http.StatusBadRequest)
+		voices := h.voiceManager.ListVoices()
+		http.Error(w, fmt.Sprintf("Voz não especificada. Vozes disponíveis: %v", voices), http.StatusBadRequest)
 		return
 	}
 
 	audio, err := h.voiceManager.Synthesize(req.Text, req.Voice)
 	if err != nil {
+		voices := h.voiceManager.ListVoices()
+		if strings.Contains(err.Error(), "não encontrada") {
+			http.Error(w, fmt.Sprintf("%v. Vozes disponíveis: %v", err, voices), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
