@@ -1,0 +1,598 @@
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\cmd\api\main.go =====
+package main
+
+import (
+	"log"
+	"net/http"
+	"tts-api/internal/config"
+	"tts-api/internal/handlers"
+	"tts-api/internal/middleware"
+	"tts-api/internal/voice"
+	"tts-api/internal/voice/downloader"
+)
+
+func main() {
+	cfg := config.Load()
+
+	// Download das vozes solicitadas
+	if err := downloader.DownloadVoices(cfg.VoicesDir, cfg.Voices); err != nil {
+		log.Printf("Aviso: erro no download das vozes: %v", err)
+	}
+
+	// Inicializa o gerenciador com as vozes disponÃ­veis
+	voiceManager, err := voice.NewManager(cfg.VoicesDir)
+	if err != nil {
+		log.Fatalf("Falha ao inicializar gerenciador de vozes: %v", err)
+	}
+	// Close nÃ£o Ã© mais necessÃ¡rio
+
+	// Lista as vozes disponÃ­veis
+	voices := voiceManager.ListVoices()
+	log.Printf("Vozes disponÃ­veis: %v", voices)
+
+	ttsHandler := handlers.NewTTSHandler(voiceManager)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/synthesize", ttsHandler.Synthesize)
+	mux.HandleFunc("/voices", ttsHandler.ListVoices)
+
+	handler := middleware.AuthMiddleware(cfg.AuthToken)(mux)
+
+	log.Printf("Servidor iniciando na porta %s", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
+		log.Fatal(err)
+	}
+}
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\cmd\api\main.go =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\internal\config\config.go =====
+package config
+
+import (
+	"os"
+	"strings"
+)
+
+type Config struct {
+	Port      string
+	AuthToken string
+	Voices    []string // renomeado para manter consistÃªncia
+	VoicesDir string
+}
+
+func Load() *Config {
+	return &Config{
+		Port:      getEnvOrDefault("PORT", "8080"),
+		AuthToken: getEnvOrDefault("AUTH_TOKEN", "default-token"),
+		Voices:    strings.Split(getEnvOrDefault("VOICE_FILES", ""), ","), // corrigido nome da variÃ¡vel
+		VoicesDir: getEnvOrDefault("VOICES_DIR", "./voices"),
+	}
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\internal\config\config.go =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\internal\handlers\tts.go =====
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"tts-api/internal/voice"
+)
+
+type TTSHandler struct {
+	voiceManager *voice.Manager
+}
+
+type SynthesizeRequest struct {
+	Text  string `json:"text"`
+	Voice string `json:"voice"`
+}
+
+func NewTTSHandler(vm *voice.Manager) *TTSHandler {
+	return &TTSHandler{voiceManager: vm}
+}
+
+func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "MÃ©todo nÃ£o permitido", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req SynthesizeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Erro ao ler requisiÃ§Ã£o", http.StatusBadRequest)
+		return
+	}
+
+	// ValidaÃ§Ãµes adicionais
+	if req.Text == "" {
+		http.Error(w, "Texto nÃ£o pode estar vazio", http.StatusBadRequest)
+		return
+	}
+
+	if req.Voice == "" {
+		voices := h.voiceManager.ListVoices()
+		http.Error(w, fmt.Sprintf("Voz nÃ£o especificada. Vozes disponÃ­veis: %v", voices), http.StatusBadRequest)
+		return
+	}
+
+	audio, err := h.voiceManager.Synthesize(req.Text, req.Voice)
+	if err != nil {
+		voices := h.voiceManager.ListVoices()
+		if strings.Contains(err.Error(), "nÃ£o encontrada") {
+			http.Error(w, fmt.Sprintf("%v. Vozes disponÃ­veis: %v", err, voices), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(audio)))
+	w.Write(audio)
+}
+
+func (h *TTSHandler) ListVoices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "MÃ©todo nÃ£o permitido", http.StatusMethodNotAllowed)
+		return
+	}
+
+	voices := h.voiceManager.ListVoices()
+	json.NewEncoder(w).Encode(map[string][]string{"voices": voices})
+}
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\internal\handlers\tts.go =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\internal\middleware\auth.go =====
+package middleware
+
+import "net/http"
+
+func AuthMiddleware(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authToken := r.Header.Get("Authorization")
+			if authToken != "Bearer "+token {
+				http.Error(w, "NÃ£o autorizado", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\internal\middleware\auth.go =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\internal\voice\downloader\downloader.go =====
+package downloader
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+const (
+	voicesJsonURL   = "https://huggingface.co/rhasspy/piper-voices/raw/main/voices.json"
+	baseDownloadURL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+)
+
+type LanguageInfo struct {
+	Code           string `json:"code"`
+	Family         string `json:"family"`
+	Region         string `json:"region"`
+	NameNative     string `json:"name_native"`
+	NameEnglish    string `json:"name_english"`
+	CountryEnglish string `json:"country_english"`
+}
+
+type FileInfo struct {
+	SizeBytes int64  `json:"size_bytes"`
+	MD5Digest string `json:"md5_digest"`
+}
+
+type VoiceInfo struct {
+	Key      string              `json:"key"`
+	Name     string              `json:"name"`
+	Language LanguageInfo        `json:"language"`
+	Quality  string              `json:"quality"`
+	Files    map[string]FileInfo `json:"files"`
+}
+
+type VoicesManifest map[string]VoiceInfo
+
+func DownloadVoices(voicesDir string, requestedVoices []string) error {
+	if err := os.MkdirAll(voicesDir, 0755); err != nil {
+		return fmt.Errorf("falha ao criar diretÃ³rio de vozes: %v", err)
+	}
+
+	manifest, err := fetchVoicesManifest()
+	if err != nil {
+		return err
+	}
+
+	for _, voiceName := range requestedVoices {
+		voiceName = strings.TrimSpace(voiceName)
+		found := false
+
+		for _, voice := range manifest {
+			if voice.Name == voiceName {
+				found = true
+				if err := downloadVoiceFiles(voice, voicesDir); err != nil {
+					log.Printf("Erro ao baixar voz %s: %v", voiceName, err)
+					continue
+				}
+				break
+			}
+		}
+
+		if !found {
+			log.Printf("Aviso: voz %s nÃ£o encontrada no manifesto", voiceName)
+		}
+	}
+
+	return nil
+}
+
+func fetchVoicesManifest() (VoicesManifest, error) {
+	resp, err := http.Get(voicesJsonURL)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar manifesto de vozes: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var manifest VoicesManifest
+	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+		return nil, fmt.Errorf("erro ao decodificar manifesto: %v", err)
+	}
+
+	return manifest, nil
+}
+
+func downloadVoiceFiles(voice VoiceInfo, voicesDir string) error {
+	for filePath := range voice.Files {
+		if !strings.HasSuffix(filePath, ".onnx") {
+			continue // Baixar apenas arquivos .onnx por enquanto
+		}
+
+		url := baseDownloadURL + filePath
+		filename := filepath.Base(filePath)
+		targetPath := filepath.Join(voicesDir, filename)
+
+		if err := downloadFile(url, targetPath); err != nil {
+			return err
+		}
+		log.Printf("Arquivo baixado com sucesso: %s", filename)
+	}
+	return nil
+}
+
+func downloadFile(url, targetPath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	out, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\internal\voice\downloader\downloader.go =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\internal\voice\manager.go =====
+package voice
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+)
+
+type Manager struct {
+	voices    map[string]string // mapa de nome -> caminho do arquivo
+	voicesDir string
+	mu        sync.RWMutex
+}
+
+func NewManager(voicesDir string) (*Manager, error) {
+	if err := os.MkdirAll(voicesDir, 0755); err != nil {
+		return nil, fmt.Errorf("falha ao criar diretÃ³rio de vozes: %v", err)
+	}
+
+	m := &Manager{
+		voices:    make(map[string]string),
+		voicesDir: voicesDir,
+	}
+
+	// Lista os arquivos .onnx disponÃ­veis
+	files, err := os.ReadDir(voicesDir)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler diretÃ³rio de vozes: %v", err)
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(strings.ToLower(file.Name()), ".onnx") {
+			fullPath := filepath.Join(voicesDir, file.Name())
+			voiceName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
+			m.voices[voiceName] = fullPath
+			log.Printf("Voz encontrada: %s", voiceName)
+		}
+	}
+
+	if len(m.voices) == 0 {
+		return nil, fmt.Errorf("nenhuma voz foi encontrada")
+	}
+
+	return m, nil
+}
+
+func (m *Manager) Synthesize(text, voiceName string) ([]byte, error) {
+	m.mu.RLock()
+	modelPath, exists := m.voices[voiceName]
+	m.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("voz %s nÃ£o encontrada", voiceName)
+	}
+
+	if text == "" {
+		return nil, fmt.Errorf("texto nÃ£o pode estar vazio")
+	}
+
+	return Synthesize(modelPath, text)
+}
+
+func (m *Manager) ListVoices() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	voices := make([]string, 0, len(m.voices))
+	for voice := range m.voices {
+		voices = append(voices, voice)
+	}
+	return voices
+}
+
+func (m *Manager) GetVoicePath(voice string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	path, exists := m.voices[voice]
+	if !exists {
+		return "", fmt.Errorf("voz %s nÃ£o encontrada", voice)
+	}
+	return path, nil
+}
+
+func (m *Manager) GetVoicesDir() string {
+	return m.voicesDir
+}
+
+func (m *Manager) Close() {
+	// MÃ©todo mantido vazio para compatibilidade com a interface existente
+}
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\internal\voice\manager.go =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\internal\voice\synthesizer.go =====
+package voice
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/amitybell/piper"
+)
+
+func Synthesize(modelPath string, text string) ([]byte, error) {
+	// Garantir que o texto termine com pontuaÃ§Ã£o
+	if len(text) > 0 && !strings.ContainsAny(text[len(text)-1:], ".!?") {
+		text = text + "."
+	}
+
+	// Criar nova instÃ¢ncia do TTS diretamente
+	tts, err := piper.New(modelPath)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao criar TTS: %v", err)
+	}
+
+	// Sintetizar o texto
+	audio, err := tts.Synthesize(text)
+	if err != nil {
+		return nil, fmt.Errorf("erro na sÃ­ntese: %v", err)
+	}
+
+	return audio, nil
+}
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\internal\voice\synthesizer.go =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\.env.example =====
+PORT=8080
+AUTH_TOKEN=seu-token-secreto
+VOICE_FILES=faber,edresson
+VOICES_DIR=/app/voices
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\.env.example =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\.gitignore =====
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\.gitignore =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\docker-compose.yml =====
+version: '3.8'
+
+services:
+  tts-api:
+    build: .
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - PORT=${PORT:-8080}
+      - AUTH_TOKEN=${AUTH_TOKEN}
+      - VOICE_FILES=${VOICE_FILES} # mantido VOICE_FILES para compatibilidade
+      - VOICES_DIR=/app/voices
+    volumes:
+      - ./voices:/app/voices
+
+volumes:
+  voices:
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\docker-compose.yml =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\Dockerfile =====
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+COPY . .
+RUN go mod download
+RUN go build -o main ./cmd/api
+
+FROM alpine:latest
+
+WORKDIR /app
+COPY --from=builder /app/main .
+RUN mkdir -p /app/voices
+RUN chmod 755 /app/voices
+
+EXPOSE 8080
+CMD ["./main"]
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\Dockerfile =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\go.mod =====
+module tts-api
+
+go 1.21
+
+require (
+	github.com/amitybell/piper v0.0.0-20240130090909-b170e42b1e09
+	github.com/amitybell/piper-asset v0.0.0-20231030194325-d36a29e3b1fd
+)
+
+require (
+	github.com/adrg/xdg v0.4.0 // indirect
+	github.com/amitybell/piper-bin-linux v0.0.0-20231118093037-92b3de178ad8 // indirect
+	github.com/amitybell/piper-bin-windows v0.0.0-20231118093113-cc2cef2f6b74 // indirect
+	github.com/klauspost/compress v1.17.3 // indirect
+	golang.org/x/sys v0.14.0 // indirect
+)
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\go.mod =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\go.sum =====
+github.com/adrg/xdg v0.4.0 h1:RzRqFcjH4nE5C6oTAxhBtoE2IRyjBSa62SCbyPidvls=
+github.com/adrg/xdg v0.4.0/go.mod h1:N6ag73EX4wyxeaoeHctc1mas01KZgsj5tYiAIwqJE/E=
+github.com/amitybell/piper v0.0.0-20240130090909-b170e42b1e09 h1:Y+7vHB4bSM9JvzI+7pIoAVXvo887KsCingDidNDTYbw=
+github.com/amitybell/piper v0.0.0-20240130090909-b170e42b1e09/go.mod h1:y0aDZdCM3erPmpX+rDGoF0O2ZdCqZvAxNjYUPrK/O7U=
+github.com/amitybell/piper-asset v0.0.0-20231030194325-d36a29e3b1fd h1:4MLHn2cCVhzhPLlPO6946h1S0yk3o7Ry1831DEa5EcE=
+github.com/amitybell/piper-asset v0.0.0-20231030194325-d36a29e3b1fd/go.mod h1:MiDKnt4NenfcrsVxYAxQW0nu4zjFYQPjGzzLB5MvOz8=
+github.com/amitybell/piper-bin-linux v0.0.0-20231118093037-92b3de178ad8 h1:ZZoEErHc7pMWVXe6sRr3FZud8lU9G3kbF2IhHB2647o=
+github.com/amitybell/piper-bin-linux v0.0.0-20231118093037-92b3de178ad8/go.mod h1:dVR33O0l/AFgQNmZfywfgNZ6qlpCKPhLnn9UpeMMLdM=
+github.com/amitybell/piper-bin-windows v0.0.0-20231118093113-cc2cef2f6b74 h1:T5hXX0Z2JaE5gtZ7LScjG0r0BmDk0+FWlzyZ2b1nboo=
+github.com/amitybell/piper-bin-windows v0.0.0-20231118093113-cc2cef2f6b74/go.mod h1:5Ea0Pc0QdO8FeriIXcqZtHViM2fi589jtFubrjaAk6w=
+github.com/amitybell/piper-voice-alan v0.0.0-20231030195550-66f4709c979b h1:KchM8+MkAg9fBbi7OXoDwCSjrRNDQfjnbfG0o0rt9Ic=
+github.com/amitybell/piper-voice-alan v0.0.0-20231030195550-66f4709c979b/go.mod h1:5ghO6mSctWNXfDoh3r46HQEMIcPr5DqE5TMYfp5hskY=
+github.com/amitybell/piper-voice-jenny v0.0.0-20231030195502-2afb5ebf3c45 h1:V/HZAQuprvdo0xXToxAuTLSwD3YrqRpDZLVBOOD+2aE=
+github.com/amitybell/piper-voice-jenny v0.0.0-20231030195502-2afb5ebf3c45/go.mod h1:eKG2Bo69QGTVKKKKApafZr+4v4zk40jYNijh0s8/PzU=
+github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
+github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/klauspost/compress v1.17.3 h1:qkRjuerhUU1EmXLYGkSH6EZL+vPSxIrYjLNAK4slzwA=
+github.com/klauspost/compress v1.17.3/go.mod h1:/dCuZOvVtNoHsyb+cuJD3itjs3NbnF6KH9zAO4BDxPM=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5CcY=
+github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.14.0 h1:Vz7Qs629MkJkGyHxUlRHizWJRG2j8fbQKjELVSNhy7Q=
+golang.org/x/sys v0.14.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c h1:dUUwHk2QECo/6vqA44rthZ8ie2QXMNeKRTHCNY2nXvo=
+gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\go.sum =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\LICENSE =====
+MIT License
+
+Copyright (c) 2024 xnetinho
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\LICENSE =====
+
+===== INÍCIO: D:\DIOME\Downloads\Programação\GoTTS\README.md =====
+# GoTTS
+TTS/Transcript
+
+===== FIM: D:\DIOME\Downloads\Programação\GoTTS\README.md =====
+

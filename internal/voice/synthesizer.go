@@ -2,6 +2,7 @@ package voice
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -15,17 +16,20 @@ func Synthesize(modelPath string, text string) ([]byte, error) {
 		text = text + "."
 	}
 
-	// Criar o asset a partir do arquivo
-	modelAsset := asset.NewFile(modelPath)
+	// Obter o diretório do modelo
+	modelDir := filepath.Dir(modelPath)
 
-	// Obter diretório absoluto para instalação
-	dataDir, err := filepath.Abs(filepath.Dir(modelPath))
-	if err != nil {
-		return nil, fmt.Errorf("erro ao obter path absoluto: %v", err)
+	// Criar um asset.Asset personalizado
+	voiceAsset := asset.Asset{
+		Name: "custom-voice",
+		FS:   os.DirFS(modelDir),
 	}
 
-	// Criar nova instância do TTS usando o sistema de instalação do piper
-	tts, err := piper.New(dataDir, modelAsset)
+	// Especificar o dataDir (pode ser vazio ou um caminho específico)
+	dataDir := ""
+
+	// Criar nova instância do TTS com os argumentos corretos
+	tts, err := piper.New(dataDir, voiceAsset)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar TTS: %v", err)
 	}
