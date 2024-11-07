@@ -49,7 +49,7 @@ RUN \
     mv /tmp/piper_install/piper/piper /usr/local/bin/piper && \
     chmod +x /usr/local/bin/piper && \
     mv /tmp/piper_install/piper/lib* /usr/local/lib/ && \
-    mv /tmp/piper_install/piper/espeak-ng-data /usr/local/share/ && \
+    mv /tmp/piper_install/piper/espeak-ng-data /usr/share/ && \
     ldconfig && \
     rm -rf /tmp/piper_install && \
     rm piper_$PIPER_ARCH.tar.gz
