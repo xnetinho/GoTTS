@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  tts-api:
+    build: .
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - PORT=${PORT:-8080}
+      - AUTH_TOKEN=${AUTH_TOKEN}
+      - VOICE_FILES=${VOICE_FILES}
+      - VOICES_DIR=/app/voices
+    volumes:
+      - ./voices:/app/voices
+
+volumes:
+  voices:
