@@ -1,5 +1,5 @@
 # Etapa de construção do aplicativo Go
-FROM golang:1.21-alpine AS builder
+FROM golang:1.21 AS builder
 
 # Obter a arquitetura de destino
 ARG TARGETARCH
@@ -14,13 +14,15 @@ RUN go mod download
 RUN go build -o main ./cmd/api
 
 # Iniciar uma nova etapa para a imagem final
-FROM alpine:latest
+FROM debian:bullseye-slim
 
 # Obter a arquitetura de destino
 ARG TARGETARCH
 
 # Instalar dependências
-RUN apk add --no-cache libstdc++ bash wget ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates wget libstdc++6 bash && \
+    rm -rf /var/lib/apt/lists/*
 
 # Definir o diretório de trabalho
 WORKDIR /app
@@ -50,9 +52,6 @@ RUN \
     mv /tmp/piper_install/piper/espeak-ng-data /usr/local/share/ && \
     rm -rf /tmp/piper_install && \
     rm piper_$PIPER_ARCH.tar.gz
-
-# Definir o LD_LIBRARY_PATH
-ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 # Expor a porta da aplicação
 EXPOSE 8080
