@@ -16,7 +16,9 @@ RUN go build -o main ./cmd/api
 # Iniciar uma nova etapa para a imagem final
 FROM debian:bullseye-slim
 
-# Restante do Dockerfile permanece o mesmo
+# **Adicionar a declaração do ARG TARGETARCH aqui**
+ARG TARGETARCH
+
 # Instalar dependências
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates wget libstdc++6 bash && \
