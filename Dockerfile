@@ -7,18 +7,17 @@ ARG TARGETARCH
 # Definir as variáveis de ambiente para a compilação Go
 ENV GOOS=linux
 ENV GOARCH=$TARGETARCH
+ENV CGO_ENABLED=0
 
 WORKDIR /app
 COPY . .
 RUN go mod download
-RUN go build -o main ./cmd/api
+RUN go build -a -installsuffix cgo -o main ./cmd/api
 
 # Iniciar uma nova etapa para a imagem final
 FROM debian:bullseye-slim
 
-# Obter a arquitetura de destino
-ARG TARGETARCH
-
+# Restante do Dockerfile permanece o mesmo
 # Instalar dependências
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates wget libstdc++6 bash && \
