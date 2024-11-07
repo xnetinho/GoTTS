@@ -1,5 +1,5 @@
 # Etapa de construção do aplicativo Go
-FROM golang:1.21 AS builder
+FROM golang:1.21-bullseye AS builder
 
 # Obter a arquitetura de destino
 ARG TARGETARCH
@@ -7,12 +7,11 @@ ARG TARGETARCH
 # Definir as variáveis de ambiente para a compilação Go
 ENV GOOS=linux
 ENV GOARCH=$TARGETARCH
-ENV CGO_ENABLED=0
 
 WORKDIR /app
 COPY . .
 RUN go mod download
-RUN go build -a -installsuffix cgo -o main ./cmd/api
+RUN go build -o main ./cmd/api
 
 # Iniciar uma nova etapa para a imagem final
 FROM debian:bullseye-slim
