@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"tts-api/internal/voice"
 )
@@ -31,6 +32,17 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validações adicionais
+	if req.Text == "" {
+		http.Error(w, "Texto não pode estar vazio", http.StatusBadRequest)
+		return
+	}
+
+	if req.Voice == "" {
+		http.Error(w, "Voz não especificada", http.StatusBadRequest)
+		return
+	}
+
 	audio, err := h.voiceManager.Synthesize(req.Text, req.Voice)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -38,6 +50,7 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(audio)))
 	w.Write(audio)
 }
 

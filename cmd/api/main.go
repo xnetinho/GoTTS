@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Falha ao inicializar gerenciador de vozes: %v", err)
 	}
-	defer voiceManager.Close()
+	defer voiceManager.Close() // Importante: adicionar esta linha
 
 	ttsHandler := handlers.NewTTSHandler(voiceManager)
 

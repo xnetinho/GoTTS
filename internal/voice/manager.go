@@ -8,7 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nabbl/piper"
+	"github.com/amitybell/piper"
+	asset "github.com/amitybell/piper-asset"
 )
 
 type Manager struct {
@@ -18,7 +19,6 @@ type Manager struct {
 }
 
 func NewManager(dataDir string, voiceFiles []string) (*Manager, error) {
-	// Verificar e criar diretório se não existir
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, fmt.Errorf("falha ao criar diretório de vozes: %v", err)
 	}
@@ -29,17 +29,14 @@ func NewManager(dataDir string, voiceFiles []string) (*Manager, error) {
 	}
 
 	for _, voiceFile := range voiceFiles {
-		// Limpar e validar nome do arquivo
 		voiceFile = strings.TrimSpace(voiceFile)
 		if !strings.HasSuffix(strings.ToLower(voiceFile), ".onnx") {
 			log.Printf("Aviso: arquivo ignorado %s - extensão inválida", voiceFile)
 			continue
 		}
 
-		// Construir caminho absoluto
 		voicePath := filepath.Clean(filepath.Join(dataDir, voiceFile))
 
-		// Verificar se o arquivo existe
 		if _, err := os.Stat(voicePath); err != nil {
 			if os.IsNotExist(err) {
 				log.Printf("Aviso: arquivo de voz não encontrado: %s", voicePath)
@@ -48,36 +45,27 @@ func NewManager(dataDir string, voiceFiles []string) (*Manager, error) {
 			return nil, fmt.Errorf("erro ao verificar arquivo %s: %v", voicePath, err)
 		}
 
-		// Carregar modelo TTS
-		tts, err := piper.New(voicePath)
+		modelAsset := asset.NewFile(voicePath)
+		tts, err := piper.New(voicePath, modelAsset)
 		if err != nil {
 			return nil, fmt.Errorf("falha ao carregar voz %s: %v", voiceFile, err)
 		}
 
-		// Usar nome base do arquivo como identificador
 		voiceName := filepath.Base(voiceFile)
 		m.voices[voiceName] = tts
 		log.Printf("Voz carregada com sucesso: %s", voiceName)
 	}
 
-	if len(m.voices) == 0 {
-		return nil, fmt.Errorf("nenhuma voz válida foi carregada do diretório %s", dataDir)
-	}
-
 	return m, nil
 }
 
-func (m *Manager) Close() error {
+func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var lastErr error
-	for _, tts := range m.voices {
-		if err := tts.Close(); err != nil {
-			lastErr = err
-		}
+	for _, v := range m.voices {
+		v.Close()
 	}
-	return lastErr
 }
 
 func (m *Manager) Synthesize(text, voice string) ([]byte, error) {
@@ -89,7 +77,21 @@ func (m *Manager) Synthesize(text, voice string) ([]byte, error) {
 		return nil, fmt.Errorf("voz %s não encontrada", voice)
 	}
 
-	return tts.Synthesize(text)
+	if text == "" {
+		return nil, fmt.Errorf("texto não pode estar vazio")
+	}
+
+	// Garantir que o texto termine com pontuação
+	if !strings.ContainsAny(text[len(text)-1:], ".!?") {
+		text = text + "."
+	}
+
+	audio, err := tts.Synthesize(text)
+	if err != nil {
+		return nil, fmt.Errorf("erro na síntese: %v", err)
+	}
+
+	return audio, nil
 }
 
 func (m *Manager) ListVoices() []string {
@@ -103,7 +105,6 @@ func (m *Manager) ListVoices() []string {
 	return voices
 }
 
-// Adicione este método para obter o diretório de vozes
 func (m *Manager) GetVoicesDir() string {
 	return m.voicesDir
 }
