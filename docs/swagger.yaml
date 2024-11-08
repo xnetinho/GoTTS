@@ -1,0 +1,109 @@
+basePath: /
+definitions:
+  handlers.ErrorResponse:
+    properties:
+      erro:
+        type: string
+    type: object
+  handlers.ListVoicesResponse:
+    properties:
+      voices:
+        items:
+          type: string
+        type: array
+    type: object
+  handlers.SynthesizeRequest:
+    properties:
+      text:
+        type: string
+      voice:
+        type: string
+    type: object
+  handlers.SynthesizeResponse:
+    properties:
+      audio:
+        type: string
+      duration:
+        type: number
+      text:
+        type: string
+      voice:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: admin@izap.app
+    name: Diomedes Neto
+    url: http://www.izap.app
+  description: API para síntese de voz usando Go e Piper
+  title: GoTTS API
+  version: "1.0"
+paths:
+  /synthesize:
+    post:
+      consumes:
+      - application/json
+      description: Converte texto em áudio utilizando a voz especificada
+      parameters:
+      - default: base64
+        description: Formato de retorno do áudio (base64 ou binary)
+        in: query
+        name: format
+        type: string
+      - description: Requisição de síntese
+        in: body
+        name: SynthesizeRequest
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SynthesizeRequest'
+      produces:
+      - application/json
+      - ' audio/wav'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SynthesizeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Sintetiza texto em áudio
+      tags:
+      - TTS
+  /voices:
+    get:
+      description: Retorna uma lista das vozes disponíveis para síntese
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListVoicesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Lista as vozes disponíveis
+      tags:
+      - TTS
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

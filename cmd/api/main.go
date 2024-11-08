@@ -8,8 +8,26 @@ import (
 	"tts-api/internal/middleware"
 	"tts-api/internal/voice"
 	"tts-api/internal/voice/downloader"
+
+	_ "tts-api/docs" // Importa o pacote docs gerado pelo swag
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
+// @title GoTTS API
+// @version 1.0
+// @description API para síntese de voz usando Go e Piper
+
+// @contact.name Diomedes Neto
+// @contact.url http://www.izap.app
+// @contact.email admin@izap.app
+
+// @host localhost:8080
+// @BasePath /
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 func main() {
 	cfg := config.Load()
 
@@ -31,9 +49,16 @@ func main() {
 	ttsHandler := handlers.NewTTSHandler(voiceManager)
 
 	mux := http.NewServeMux()
+
+	// Rotas que não exigem autenticação
+	mux.HandleFunc("/healthcheck", handlers.HealthCheckHandler)
+	mux.HandleFunc("/api/", httpSwagger.WrapHandler)
+
+	// Rotas que exigem autenticação
 	mux.HandleFunc("/synthesize", ttsHandler.Synthesize)
 	mux.HandleFunc("/voices", ttsHandler.ListVoices)
 
+	// Aplica o middleware de autenticação nas rotas que exigem
 	handler := middleware.AuthMiddleware(cfg.AuthToken)(mux)
 
 	log.Printf("Servidor iniciando na porta %s", cfg.Port)

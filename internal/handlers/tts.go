@@ -23,6 +23,20 @@ func NewTTSHandler(vm *voice.Manager) *TTSHandler {
 	return &TTSHandler{voiceManager: vm}
 }
 
+// Synthesize sintetiza o texto em áudio
+// @Summary      Sintetiza texto em áudio
+// @Description  Converte texto em áudio utilizando a voz especificada
+// @Tags         TTS
+// @Accept       json
+// @Produce      json, audio/wav
+// @Param        format query string false "Formato de retorno do áudio (base64 ou binary)" default(base64)
+// @Param        SynthesizeRequest body handlers.SynthesizeRequest true "Requisição de síntese"
+// @Success      200  {object}  handlers.SynthesizeResponse
+// @Failure      400  {object}  handlers.ErrorResponse
+// @Failure      401  {object}  handlers.ErrorResponse
+// @Failure      500  {object}  handlers.ErrorResponse
+// @Router       /synthesize [post]
+// @Security     ApiKeyAuth
 func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONError(w, http.StatusMethodNotAllowed, "Método não permitido")
@@ -106,6 +120,15 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListVoices retorna a lista de vozes disponíveis
+// @Summary      Lista as vozes disponíveis
+// @Description  Retorna uma lista das vozes disponíveis para síntese
+// @Tags         TTS
+// @Produce      json
+// @Success      200  {object}  handlers.ListVoicesResponse
+// @Failure      401  {object}  handlers.ErrorResponse
+// @Router       /voices [get]
+// @Security     ApiKeyAuth
 func (h *TTSHandler) ListVoices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "Método não permitido")
@@ -154,4 +177,21 @@ func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) 
 // Função auxiliar para escrever erros em JSON
 func writeJSONError(w http.ResponseWriter, statusCode int, message string) {
 	writeJSONResponse(w, statusCode, map[string]string{"erro": message})
+}
+
+// SynthesizeResponse representa a resposta de sucesso da síntese
+type SynthesizeResponse struct {
+	Duration float64 `json:"duration"`
+	Voice    string  `json:"voice"`
+	Text     string  `json:"text"`
+	Audio    string  `json:"audio,omitempty"`
+}
+
+// ErrorResponse representa uma resposta de erro
+type ErrorResponse struct {
+	Erro string `json:"erro"`
+}
+
+type ListVoicesResponse struct {
+	Voices []string `json:"voices"`
 }
