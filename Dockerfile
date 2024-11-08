@@ -1,5 +1,5 @@
 # Etapa de construção do aplicativo Go
-FROM golang:1.21-bullseye AS builder
+FROM golang:1.22-bullseye AS builder
 
 # Obter a arquitetura de destino
 ARG TARGETARCH
