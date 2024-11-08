@@ -6,15 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"tts-api/internal/config"
 )
 
 type Manager struct {
 	voices    map[string]string // mapa de nome -> caminho do arquivo
 	voicesDir string
 	mu        sync.RWMutex
+	Config    *config.Config // Adicionado
 }
 
-func NewManager(voicesDir string) (*Manager, error) {
+func NewManager(cfg *config.Config) (*Manager, error) {
+	voicesDir := cfg.VoicesDir
 	if err := os.MkdirAll(voicesDir, 0755); err != nil {
 		return nil, fmt.Errorf("falha ao criar diretório de vozes: %v", err)
 	}
@@ -22,6 +25,7 @@ func NewManager(voicesDir string) (*Manager, error) {
 	m := &Manager{
 		voices:    make(map[string]string),
 		voicesDir: voicesDir,
+		Config:    cfg, // Atribui a configuração
 	}
 
 	entries, err := os.ReadDir(voicesDir)

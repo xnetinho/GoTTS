@@ -19,11 +19,10 @@ func main() {
 	}
 
 	// Inicializa o gerenciador com as vozes disponíveis
-	voiceManager, err := voice.NewManager(cfg.VoicesDir)
+	voiceManager, err := voice.NewManager(cfg)
 	if err != nil {
 		log.Fatalf("Falha ao inicializar gerenciador de vozes: %v", err)
 	}
-	// Close não é mais necessário
 
 	// Lista as vozes disponíveis
 	voices := voiceManager.ListVoices()
