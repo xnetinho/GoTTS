@@ -15,7 +15,7 @@ COPY . .
 RUN go mod download
 
 # Instalar a ferramenta swag
-RUN go install github.com/swaggo/swag/cmd/swag@v1.8.14
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.2
 
 # Gerar a documentação Swagger
 RUN swag init -g cmd/api/main.go
