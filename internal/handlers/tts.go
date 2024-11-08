@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"tts-api/internal/voice"
 )
 
@@ -55,7 +56,7 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 		voices := h.voiceManager.ListVoices()
 		mensagem := map[string]interface{}{
 			"erro":             "Voz não especificada",
-			"vozesDisponíveis": voices,
+			"vozesDisponiveis": voices,
 		}
 		writeJSONResponse(w, http.StatusBadRequest, mensagem)
 		return
@@ -72,7 +73,7 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 		voices := h.voiceManager.ListVoices()
 		mensagem := map[string]interface{}{
 			"erro":             err.Error(),
-			"vozesDisponíveis": voices,
+			"vozesDisponiveis": voices,
 		}
 		writeJSONResponse(w, http.StatusBadRequest, mensagem)
 		return
@@ -85,24 +86,23 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Criar o objeto de resposta
-	response := map[string]interface{}{
-		"duration": duration,
-		"voice":    req.Voice,
-		"text":     req.Text,
-	}
-
-	if format == "base64" || format == "binary" {
-		// Codificar o áudio em base64
-		encodedAudio := base64.StdEncoding.EncodeToString(audio)
-		response["audio"] = encodedAudio
-		response["encoding"] = format
-
-		// Retornar o objeto JSON
-		writeJSONResponse(w, http.StatusOK, response)
+	if format == "binary" {
+		// Retornar o áudio binário diretamente
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Header().Set("Content-Length", strconv.Itoa(len(audio)))
+		w.Header().Set("X-Duration-Seconds", fmt.Sprintf("%.2f", duration))
+		w.WriteHeader(http.StatusOK)
+		w.Write(audio)
 	} else {
-		// Formato não suportado
-		writeJSONError(w, http.StatusBadRequest, "Formato inválido. Use 'binary' ou 'base64'.")
+		// Codificar o áudio em base64 e retornar em JSON
+		encodedAudio := base64.StdEncoding.EncodeToString(audio)
+		response := map[string]interface{}{
+			"duration": duration,
+			"voice":    req.Voice,
+			"text":     req.Text,
+			"audio":    encodedAudio,
+		}
+		writeJSONResponse(w, http.StatusOK, response)
 	}
 }
 
