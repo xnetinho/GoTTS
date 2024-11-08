@@ -1,0 +1,52 @@
+version: "3.7"
+
+###########
+# https://github.com/xnetinho/gotts
+#
+# Imagem do Docker
+# https://hub.docker.com/r/xnetinho/gotts
+###########
+
+# Definição dos Serviços
+services:
+  # Definição do Nome do Serviço
+  gotts:
+    # imagem do GoTTS
+    image: xnetinho/gotts:latest    
+    volumes:
+      - gotts_files:/app/voices
+    networks:      
+      - network_public    
+    environment:
+      # *****************************************************************************************
+      # Configurações Gerais
+      # *****************************************************************************************
+      # Token de administração
+      - VOICES_DIR=/app/voices
+      - AUTH_TOKEN=Tok3nS3gur0 # Gere um token seguro em https://senhasegura.remontti.com.br
+      - MAX_TEXTO=100000
+      - VOICE_FILES=faber,edresson
+
+    # Configura o Modo de Deploy da Aplicação
+    deploy:
+      
+      labels:
+        # Configura o Roteamento do Traefik
+        - traefik.enable=true
+        - traefik.http.routers.gotts.rule=Host(`gotts.seudominio.com.br`) # define o endereço
+        - traefik.http.routers.gotts.entrypoints=websecure
+        - traefik.http.routers.gotts.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.gotts.priority=1
+        - traefik.http.routers.gotts.service=gotts
+        - traefik.http.services.gotts.loadbalancer.server.port=8080
+        - traefik.http.services.gotts.loadbalancer.passHostHeader=true
+
+networks:
+  network_public:
+    name: network_public
+    external: true
+
+volumes:
+  gotts_files:
+    name: gotts_files
+    external: true
