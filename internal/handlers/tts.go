@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"tts-api/internal/voice"
 )
 
@@ -26,19 +24,19 @@ func NewTTSHandler(vm *voice.Manager) *TTSHandler {
 
 func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "Método não permitido")
 		return
 	}
 
 	var req SynthesizeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Erro ao ler requisição", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "Erro ao ler requisição")
 		return
 	}
 
 	// Validações adicionais
 	if req.Text == "" {
-		http.Error(w, "Texto não pode estar vazio", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "Texto não pode estar vazio")
 		return
 	}
 
@@ -49,15 +47,17 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 			"limite":       h.voiceManager.Config.MaxTexto,
 			"tamanhoTexto": len(req.Text),
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(mensagem)
+		writeJSONResponse(w, http.StatusBadRequest, mensagem)
 		return
 	}
 
 	if req.Voice == "" {
 		voices := h.voiceManager.ListVoices()
-		http.Error(w, fmt.Sprintf("Voz não especificada. Vozes disponíveis: %v", voices), http.StatusBadRequest)
+		mensagem := map[string]interface{}{
+			"erro":             "Voz não especificada",
+			"vozesDisponíveis": voices,
+		}
+		writeJSONResponse(w, http.StatusBadRequest, mensagem)
 		return
 	}
 
@@ -70,55 +70,50 @@ func (h *TTSHandler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	audio, err := h.voiceManager.Synthesize(req.Text, req.Voice)
 	if err != nil {
 		voices := h.voiceManager.ListVoices()
-		if strings.Contains(err.Error(), "não encontrada") {
-			http.Error(w, fmt.Sprintf("%v. Vozes disponíveis: %v", err, voices), http.StatusBadRequest)
-			return
+		mensagem := map[string]interface{}{
+			"erro":             err.Error(),
+			"vozesDisponíveis": voices,
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONResponse(w, http.StatusBadRequest, mensagem)
 		return
 	}
 
 	// Calcular a duração do áudio
 	duration, err := calculateWavDuration(audio)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Erro ao calcular a duração do áudio: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Erro ao calcular a duração do áudio: %v", err))
 		return
 	}
 
-	if format == "base64" {
+	// Criar o objeto de resposta
+	response := map[string]interface{}{
+		"duration": duration,
+		"voice":    req.Voice,
+		"text":     req.Text,
+	}
+
+	if format == "base64" || format == "binary" {
 		// Codificar o áudio em base64
 		encodedAudio := base64.StdEncoding.EncodeToString(audio)
+		response["audio"] = encodedAudio
+		response["encoding"] = format
 
-		// Criar o objeto JSON com o áudio e a duração
-		response := map[string]interface{}{
-			"audio":    encodedAudio,
-			"duration": duration,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
-	} else if format == "binary" {
-		// Enviar o áudio em binário
-		w.Header().Set("Content-Type", "audio/wav")
-		w.Header().Set("Content-Length", strconv.Itoa(len(audio)))
-		w.Header().Set("X-Duration-Seconds", fmt.Sprintf("%.2f", duration))
-		w.WriteHeader(http.StatusOK)
-		w.Write(audio)
+		// Retornar o objeto JSON
+		writeJSONResponse(w, http.StatusOK, response)
 	} else {
 		// Formato não suportado
-		http.Error(w, "Formato inválido. Use 'binary' ou 'base64'.", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "Formato inválido. Use 'binary' ou 'base64'.")
 	}
 }
 
 func (h *TTSHandler) ListVoices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "Método não permitido")
 		return
 	}
 
 	voices := h.voiceManager.ListVoices()
-	json.NewEncoder(w).Encode(map[string][]string{"voices": voices})
+	writeJSONResponse(w, http.StatusOK, map[string][]string{"voices": voices})
 }
 
 // Função para calcular a duração do áudio em segundos
@@ -147,4 +142,16 @@ func calculateWavDuration(data []byte) (float64, error) {
 	duration := float64(totalSamples) / float64(sampleRate)
 
 	return duration, nil
+}
+
+// Função auxiliar para escrever respostas JSON
+func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(data)
+}
+
+// Função auxiliar para escrever erros em JSON
+func writeJSONError(w http.ResponseWriter, statusCode int, message string) {
+	writeJSONResponse(w, statusCode, map[string]string{"erro": message})
 }
