@@ -10,7 +10,17 @@ ENV GOARCH=$TARGETARCH
 
 WORKDIR /app
 COPY . .
+
+# Instalar as dependências
 RUN go mod download
+
+# Instalar a ferramenta swag
+RUN go install github.com/swaggo/swag/cmd/swag@v1.8.14
+
+# Gerar a documentação Swagger
+RUN swag init -g cmd/api/main.go
+
+# Compilar o aplicativo
 RUN go build -o main ./cmd/api
 
 # Iniciar uma nova etapa para a imagem final
@@ -27,8 +37,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Definir o diretório de trabalho
 WORKDIR /app
 
-# Copiar o aplicativo Go compilado da etapa anterior
+# Copiar o aplicativo Go compilado e a pasta docs da etapa anterior
 COPY --from=builder /app/main .
+COPY --from=builder /app/docs ./docs
 
 # Criar o diretório de vozes
 RUN mkdir -p /app/voices
